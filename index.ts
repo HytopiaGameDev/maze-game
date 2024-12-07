@@ -333,53 +333,35 @@ startServer((world) => {
 
 		const startPos = currentMaze.startPos();
 
+		playerEntity.onBlockCollision = (_entity, blockType, started) => {
+			if (!started || playerInGoal || blockType.id != BLOCK_TYPE_GOAL) {
+				return;
+			}
+
+			playerInGoal = true;
+			world.chatManager.sendPlayerMessage(
+				player,
+				"Congratulations, you successfully solved the maze!",
+			);
+			world.chatManager.sendPlayerMessage(
+				player,
+				'To generate a new maze, type "/generate <width> <height>" to generate a <width>x<height> maze.',
+			);
+		};
+
+		playerEntity.player.camera.setMode(PlayerCameraMode.FIRST_PERSON);
+		playerEntity.player.camera.setOffset({ x: 0, y: 0.7, z: 0 });
+		playerEntity.player.camera.setModelHiddenNodes(["head", "neck"]);
+
 		playerEntity.spawn(world, {
 			x: startPos.x + 0.5,
 			y: 3,
 			z: startPos.z + 0.5,
 		});
-		playerEntity.player.camera.setMode(PlayerCameraMode.FIRST_PERSON);
-		playerEntity.player.camera.setOffset({ x: 0, y: 0.7, z: 0 });
-		playerEntity.player.camera.setModelHiddenNodes(["head", "neck"]);
 
-		playerEntity.onTick = (entity, _deltaTime) => {
-			const playerPos = entity.getWorldCenterOfMass()!;
-			const goalPos = currentMaze.goalPos();
-
-			if (
-				!playerInGoal &&
-				new Vector3(playerPos.x, playerPos.y, playerPos.z).distance(
-						new Vector3(goalPos.x, playerPos.y, goalPos.z),
-					) < 1
-			) {
-				playerInGoal = true;
-				world.chatManager.sendPlayerMessage(
-					player,
-					"Congratulations, you successfully solved the maze!",
-				);
-				world.chatManager.sendPlayerMessage(
-					player,
-					'To generate a new maze, type "/regenerate <width> <height>" to generate a <width>x<height> maze.',
-				);
-			}
-		};
-
-		// Send a nice welcome message that only the player who joined will see ;)
 		world.chatManager.sendPlayerMessage(
 			player,
-			"Welcome to the game!",
-			"00FF00",
-		);
-		world.chatManager.sendPlayerMessage(player, "Use WASD to move around.");
-		world.chatManager.sendPlayerMessage(player, "Press space to jump.");
-		world.chatManager.sendPlayerMessage(player, "Hold shift to sprint.");
-		world.chatManager.sendPlayerMessage(
-			player,
-			'To generate a new maze, type "/regenerate <width> <height>" to generate a <width>x<height> maze.',
-		);
-		world.chatManager.sendPlayerMessage(
-			player,
-			"Press \\ to enter or exit debug view.",
+			'To generate a new maze, type "/generate <width> <height>" to generate a <width>x<height> maze.',
 		);
 	};
 
@@ -400,7 +382,7 @@ startServer((world) => {
 		);
 	};
 
-	world.chatManager.registerCommand("/regenerate", (player, args) => {
+	world.chatManager.registerCommand("/generate", (player, args) => {
 		currentMaze = new Maze(
 			Number.parseInt(args[0]),
 			Number.parseInt(args[1]),
@@ -413,7 +395,11 @@ startServer((world) => {
 		);
 		const startPos = currentMaze.startPos();
 		world.entityManager.getAllPlayerEntities(player).forEach((entity) =>
-			entity.setTranslation({ x: startPos.x + 0.5, y: 3, z: startPos.z + 0.5 })
+			entity.setTranslation({
+				x: startPos.x + 0.5,
+				y: 3,
+				z: startPos.z + 0.5,
+			})
 		);
 
 		world.chunkLattice.getAllChunks().forEach((chunk) => chunk.despawn());
