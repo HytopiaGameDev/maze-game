@@ -23,9 +23,13 @@
  * Official SDK NPM Package: https://www.npmjs.com/package/hytopia
  */
 
-import { PlayerCameraMode, PlayerEntity, startServer } from "hytopia";
-
-import worldMap from "./assets/map.json" with { type: "json" };
+import {
+	ColliderShape,
+	PlayerCameraMode,
+	PlayerEntity,
+	startServer,
+	Vector3,
+} from "hytopia";
 import { BlockTypeOptions } from "hytopia";
 
 /**
@@ -58,7 +62,14 @@ const enum Direction {
 
 type Vector2 = { x: number; z: number };
 
-function offset(pos: Vector2, dir: Direction, scale: number): Vector2 {
+/**
+ * The position you get when stepping in a given direction for a given amount of tiles.
+ *
+ * @param pos the position to step from
+ * @param dir the direction to step in
+ * @param scale the number of tiles to step
+ */
+function stepIn(pos: Vector2, dir: Direction, scale: number): Vector2 {
 	switch (dir) {
 		case Direction.Up:
 			return { x: pos.x, z: pos.z - scale };
@@ -71,24 +82,48 @@ function offset(pos: Vector2, dir: Direction, scale: number): Vector2 {
 	}
 }
 
-function keyOf(vec: Vector2): string {
-	return `${vec.x},${vec.z}`;
+/**
+ * Returns a hash value for any Vector2 that is perfect for coordinates in [0, 2^16)
+ *
+ * @param vec the vector to generate a hash value for
+ */
+function hash(vec: Vector2): number {
+	return ((vec.x & 0xFFFF) << 16) | (vec.z & 0xFFFF);
 }
 
 class Maze {
 	readonly width: number;
 	readonly height: number;
 
-	cells: Array<CellType>;
-	startIndex: number;
-	goalIndex: number;
+	readonly cells: Array<CellType>;
+	readonly startIndex: number;
+	readonly goalIndex: number;
 
-	constructor(width: number, height: number) {
+	/**
+	 * Construct a maze with the given dimensions. If any of the dimensions is even,
+	 * it is rounded up to the nearest odd number.
+	 *
+	 * @param width the width (in cells) this maze should have
+	 * @param height the height (in cells) this maze should have
+	 * @param startPos the starting position in this maze. If no starting position is specified, (1, 1) is used.
+	 * @param goalPos the goal position in this maze. If no goal position is specified, (width - 2, height - 2) is used.
+	 */
+	constructor(
+		width: number,
+		height: number,
+		startPos?: Vector2,
+		goalPos?: Vector2,
+	) {
 		this.width = width + (width % 2 == 0 ? 1 : 0);
 		this.height = height + (height % 2 == 0 ? 1 : 0);
 
-		this.startIndex = this.linearize(1, 1);
-		this.goalIndex = this.linearize(this.width - 2, this.height - 2);
+		const start = startPos === undefined ? { x: 1, z: 1 } : startPos;
+		const goal = goalPos === undefined
+			? { x: this.width - 2, z: this.height - 2 }
+			: goalPos;
+
+		this.startIndex = this.linearize(start.x, start.z);
+		this.goalIndex = this.linearize(goal.x, goal.z);
 
 		this.cells = new Array(this.width * this.height);
 		for (let z = 0; z < this.height; z++) {
@@ -99,12 +134,10 @@ class Maze {
 
 		this.cells[this.startIndex] = CellType.Empty;
 
-		console.log("start generate maze");
 		this.generateMaze();
-		console.log("done generating maze");
 	}
 
-	linearize(x: number, z: number): number {
+	private linearize(x: number, z: number): number {
 		return z * this.width + x;
 	}
 
@@ -112,15 +145,15 @@ class Maze {
 		return { x: index % this.width, z: Math.floor(index / this.width) };
 	}
 
-	setCellType(x: number, z: number, cellType: CellType) {
+	private setCellType(x: number, z: number, cellType: CellType) {
 		this.cells[this.linearize(x, z)] = cellType;
 	}
 
-	getCellType(x: number, z: number): CellType {
+	private getCellType(x: number, z: number): CellType {
 		return this.cells[this.linearize(x, z)];
 	}
 
-	generateMaze() {
+	private generateMaze() {
 		let unvisitedIntersections =
 			Math.floor(this.width / 2) * Math.floor(this.height / 2) - 1;
 
@@ -130,27 +163,26 @@ class Maze {
 
 			let curr = start;
 			while (this.getCellType(curr.x, curr.z) == CellType.Solid) {
-				console.log(curr);
 				this.setCellType(curr.x, curr.z, CellType.Empty);
-				const dir = path.get(keyOf(curr))!;
-				const between = offset(curr, dir, 1);
+				const dir = path.get(hash(curr))!;
+				const between = stepIn(curr, dir, 1);
 				this.setCellType(between.x, between.z, CellType.Empty);
-				curr = offset(curr, dir, 2);
+				curr = stepIn(curr, dir, 2);
+
 				unvisitedIntersections--;
-				console.log(unvisitedIntersections);
 			}
 		}
 	}
 
-	randomWalk(
+	private randomWalk(
 		start: Vector2,
-	): Map<string, Direction> {
+	): Map<number, Direction> {
 		const path = new Map();
 		let curr = start;
 
 		while (this.getCellType(curr.x, curr.z) == CellType.Solid) {
 			const dir = this.randomDir();
-			const nextPos = offset(curr, dir, 2);
+			const nextPos = stepIn(curr, dir, 2);
 
 			if (
 				nextPos.x < 0 || nextPos.z < 0 || nextPos.x > this.width - 1 ||
@@ -159,11 +191,10 @@ class Maze {
 				continue;
 			}
 
-			if (this.getCellType(nextPos.x, nextPos.z) == CellType.Solid) {
-				path.set(keyOf(curr), dir);
-				curr = nextPos;
-			} else {
-				path.set(keyOf(curr), dir);
+			path.set(hash(curr), dir);
+
+			curr = nextPos;
+			if (this.getCellType(nextPos.x, nextPos.z) != CellType.Solid) {
 				break;
 			}
 		}
@@ -171,32 +202,24 @@ class Maze {
 		return path;
 	}
 
-	randomOddCell(): Vector2 {
-		while (true) {
-			const x = Math.floor(Math.random() * this.width);
-			const z = Math.floor(Math.random() * this.height);
+	private randomOddCell(): Vector2 {
+		const x = Math.floor(Math.random() * (this.width - 1) / 2);
+		const z = Math.floor(Math.random() * (this.height - 1) / 2);
 
-			if (x % 2 == 1 && z % 2 == 1) {
-				return { x: x, z: z };
-			}
-		}
+		return { x: 2 * x + 1, z: 2 * z + 1 };
 	}
 
-	randomDir(): Direction {
+	private randomDir(): Direction {
 		const index = Math.floor(Math.random() * 4);
+		return index as Direction;
+	}
 
-		switch (index) {
-			case 0:
-				return Direction.Up;
-			case 1:
-				return Direction.Down;
-			case 2:
-				return Direction.Left;
-			case 3:
-				return Direction.Right;
-			default:
-				throw new Error();
-		}
+	public startPos(): Vector2 {
+		return this.delinearize(this.startIndex);
+	}
+
+	public goalPos(): Vector2 {
+		return this.delinearize(this.goalIndex);
 	}
 }
 
@@ -215,6 +238,10 @@ class MazeWorld {
 				id: BLOCK_TYPE_FLOOR,
 				name: "bricks",
 				textureUri: "textures/bricks.png",
+				customColliderOptions: {
+					shape: ColliderShape.BLOCK,
+					friction: 0,
+				},
 			},
 			{
 				id: BLOCK_TYPE_START,
@@ -238,13 +265,10 @@ class MazeWorld {
 			},
 		];
 
-		this.generateBlocks();
-	}
-
-	generateBlocks() {
 		this.maze.cells.forEach((cell, index) => {
 			const pos = this.maze.delinearize(index);
 			if (cell === CellType.Solid) {
+				// two block high walls
 				this.addBlock(pos.x, 1, pos.z, 4);
 				this.addBlock(pos.x, 2, pos.z, 4);
 			}
@@ -255,6 +279,8 @@ class MazeWorld {
 			} else if (index == this.maze.goalIndex) {
 				id = 3;
 			}
+
+			// ground plane, with specially marked start- and goal cells
 			this.addBlock(pos.x, 0, pos.z, id);
 		});
 	}
@@ -263,6 +289,9 @@ class MazeWorld {
 		this.blocks[`${x},${y},${z}`] = id;
 	}
 }
+
+let currentMaze = new Maze(15, 15);
+let playerInGoal = false;
 
 startServer((world) => {
 	/**
@@ -283,8 +312,7 @@ startServer((world) => {
 	 * the assets folder as map.json.
 	 */
 
-	const mazeWorld = new MazeWorld(new Maze(31, 31));
-	world.loadMap(mazeWorld);
+	world.loadMap(new MazeWorld(currentMaze));
 
 	/**
 	 * Handle player joining the game. The onPlayerJoin
@@ -303,11 +331,38 @@ startServer((world) => {
 			modelScale: 0.7,
 		});
 
-		// hardcoded starting point...
-		playerEntity.spawn(world, { x: 1.5, y: 3, z: 1.5 });
+		const startPos = currentMaze.startPos();
+
+		playerEntity.spawn(world, {
+			x: startPos.x + 0.5,
+			y: 3,
+			z: startPos.z + 0.5,
+		});
 		playerEntity.player.camera.setMode(PlayerCameraMode.FIRST_PERSON);
 		playerEntity.player.camera.setOffset({ x: 0, y: 0.7, z: 0 });
 		playerEntity.player.camera.setModelHiddenNodes(["head", "neck"]);
+
+		playerEntity.onTick = (entity, _deltaTime) => {
+			const playerPos = entity.getWorldCenterOfMass()!;
+			const goalPos = currentMaze.goalPos();
+
+			if (
+				!playerInGoal &&
+				new Vector3(playerPos.x, playerPos.y, playerPos.z).distance(
+						new Vector3(goalPos.x, playerPos.y, goalPos.z),
+					) < 1
+			) {
+				playerInGoal = true;
+				world.chatManager.sendPlayerMessage(
+					player,
+					"Congratulations, you successfully solved the maze!",
+				);
+				world.chatManager.sendPlayerMessage(
+					player,
+					'To generate a new maze, type "/regenerate <width> <height>" to generate a <width>x<height> maze.',
+				);
+			}
+		};
 
 		// Send a nice welcome message that only the player who joined will see ;)
 		world.chatManager.sendPlayerMessage(
@@ -318,6 +373,10 @@ startServer((world) => {
 		world.chatManager.sendPlayerMessage(player, "Use WASD to move around.");
 		world.chatManager.sendPlayerMessage(player, "Press space to jump.");
 		world.chatManager.sendPlayerMessage(player, "Hold shift to sprint.");
+		world.chatManager.sendPlayerMessage(
+			player,
+			'To generate a new maze, type "/regenerate <width> <height>" to generate a <width>x<height> maze.',
+		);
 		world.chatManager.sendPlayerMessage(
 			player,
 			"Press \\ to enter or exit debug view.",
@@ -342,14 +401,22 @@ startServer((world) => {
 	};
 
 	world.chatManager.registerCommand("/regenerate", (player, args) => {
-		const width = Number.parseInt(args[0]);
-		const height = Number.parseInt(args[1]);
+		currentMaze = new Maze(
+			Number.parseInt(args[0]),
+			Number.parseInt(args[1]),
+		);
+		playerInGoal = false;
+
 		world.chatManager.sendPlayerMessage(
 			player,
-			`generating a ${width} by ${height} maze.`,
+			`generated a ${currentMaze.width} by ${currentMaze.height} maze.`,
+		);
+		const startPos = currentMaze.startPos();
+		world.entityManager.getAllPlayerEntities(player).forEach((entity) =>
+			entity.setTranslation({ x: startPos.x + 0.5, y: 3, z: startPos.z + 0.5 })
 		);
 
 		world.chunkLattice.getAllChunks().forEach((chunk) => chunk.despawn());
-		world.loadMap(new MazeWorld(new Maze(width, height)));
+		world.loadMap(new MazeWorld(currentMaze));
 	});
 });
