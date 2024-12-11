@@ -91,7 +91,12 @@ function hash(vec: Vector2): number {
 	return ((vec.x & 0xFFFF) << 16) | (vec.z & 0xFFFF);
 }
 
-class Maze {
+interface Maze {
+	width: number;
+	height: number;
+}
+
+class WilsonMaze implements Maze {
 	readonly width: number;
 	readonly height: number;
 
@@ -162,7 +167,7 @@ class Maze {
 			const path = this.randomWalk(start);
 
 			let curr = start;
-			while (this.getCellType(curr.x, curr.z) == CellType.Solid) {
+			while (this.getCellType(curr.x, curr.z) === CellType.Solid) {
 				this.setCellType(curr.x, curr.z, CellType.Empty);
 				const dir = path.get(hash(curr))!;
 				const between = stepIn(curr, dir, 1);
@@ -290,7 +295,7 @@ class MazeWorld {
 	}
 }
 
-let currentMaze = new Maze(15, 15);
+let currentMaze = new WilsonMaze(15, 15);
 let playerInGoal = false;
 
 startServer((world) => {
@@ -347,6 +352,22 @@ startServer((world) => {
 				player,
 				'To generate a new maze, type "/generate <width> <height>" to generate a <width>x<height> maze.',
 			);
+		};
+
+		playerEntity.onTick = (entity, _) => {
+			const currentStart = currentMaze.startPos();
+			const currentGoal = currentMaze.goalPos();
+
+			const com = entity.getWorldCenterOfMass()!;
+			const entityPos = { x: Math.floor(com.x), z: Math.floor(com.z) };
+
+			if (entityPos != currentStart && entityPos != currentGoal) {
+				world.chunkLattice.setBlock({
+					x: entityPos.x,
+					y: 0,
+					z: entityPos.z,
+				}, BLOCK_TYPE_VISITED);
+			}
 		};
 
 		playerEntity.player.camera.setMode(PlayerCameraMode.FIRST_PERSON);
