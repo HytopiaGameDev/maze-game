@@ -1,4 +1,4 @@
-import { CellType, Maze, Vector2 } from "./Maze.ts";
+import { CellType, Maze, Vector2 } from "../Maze.ts";
 
 export class EdgePercolationMaze implements Maze {
 	width: number;

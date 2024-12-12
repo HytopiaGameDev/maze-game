@@ -30,9 +30,9 @@ import {
 	startServer,
 } from "hytopia";
 import { BlockTypeOptions } from "hytopia";
-import { CellType, Maze } from "./Maze.ts";
-import { WilsonMaze } from "./Wilson.ts";
-import { EdgePercolationMaze } from "./EdgePercolation.ts";
+import { CellType, Maze } from "./maze/Maze.ts";
+import { EdgePercolationMaze } from "./maze/gen/EdgePercolation.ts";
+import { WilsonMaze } from "./maze/gen/Wilson.ts";
 
 /**
  * startServer is always the entry point for our game.
@@ -65,10 +65,6 @@ class MazeWorld {
 				id: BLOCK_TYPE_FLOOR,
 				name: "bricks",
 				textureUri: "textures/bricks.png",
-				customColliderOptions: {
-					shape: ColliderShape.BLOCK,
-					friction: 0,
-				},
 			},
 			{
 				id: BLOCK_TYPE_START,
@@ -83,7 +79,7 @@ class MazeWorld {
 			{
 				id: BLOCK_TYPE_WALL,
 				name: "leaves",
-				textureUri: "textures/leaves.png",
+				textureUri: "textures/bricks.png",
 			},
 			{
 				id: BLOCK_TYPE_VISITED,
@@ -96,8 +92,8 @@ class MazeWorld {
 			const pos = this.maze.delinearize(index);
 			if (cell === CellType.Solid) {
 				// two block high walls
-				this.addBlock(pos.x, 1, pos.z, 4);
-				this.addBlock(pos.x, 2, pos.z, 4);
+				this.addBlock(pos.x, 1, pos.z, BLOCK_TYPE_WALL);
+				this.addBlock(pos.x, 2, pos.z, BLOCK_TYPE_WALL);
 			}
 
 			let id = 1;
@@ -117,7 +113,7 @@ class MazeWorld {
 	}
 }
 
-let currentMaze = new EdgePercolationMaze(15, 15);
+let currentMaze = new WilsonMaze(15, 15);
 let playerInGoal = false;
 
 startServer((world) => {
@@ -226,7 +222,7 @@ startServer((world) => {
 	};
 
 	world.chatManager.registerCommand("/generate", (player, args) => {
-		currentMaze = new EdgePercolationMaze(
+		currentMaze = new WilsonMaze(
 			Number.parseInt(args[0]),
 			Number.parseInt(args[1]),
 		);
