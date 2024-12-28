@@ -23,16 +23,11 @@
  * Official SDK NPM Package: https://www.npmjs.com/package/hytopia
  */
 
-import {
-	ColliderShape,
-	PlayerCameraMode,
-	PlayerEntity,
-	startServer,
-} from "hytopia";
+import { PlayerCameraMode, PlayerEntity, startServer } from "hytopia";
 import { BlockTypeOptions } from "hytopia";
-import { CellType, Maze } from "./maze/Maze.ts";
-import { EdgePercolationMaze } from "./maze/gen/EdgePercolation.ts";
-import { WilsonMaze } from "./maze/gen/Wilson.ts";
+import { CellType, Maze } from "./game/Maze.ts";
+import { WilsonMaze } from "./game/gen/Wilson.ts";
+import { BLOCK_TYPE_GOAL, BLOCK_TYPE_VISITED, MazeWorld } from "./game/MazeWorld.ts";
 
 /**
  * startServer is always the entry point for our game.
@@ -44,74 +39,6 @@ import { WilsonMaze } from "./maze/gen/Wilson.ts";
  * Documentation: https://github.com/hytopiagg/sdk/blob/main/docs/server.startserver.md
  */
 
-const BLOCK_TYPE_FLOOR = 1;
-const BLOCK_TYPE_START = 2;
-const BLOCK_TYPE_GOAL = 3;
-const BLOCK_TYPE_WALL = 4;
-const BLOCK_TYPE_VISITED = 5;
-
-class MazeWorld {
-	maze: Maze;
-	blockTypes: BlockTypeOptions[];
-	blocks: {
-		[coordinate: string]: number;
-	};
-
-	constructor(maze: Maze) {
-		this.maze = maze;
-		this.blocks = {};
-		this.blockTypes = [
-			{
-				id: BLOCK_TYPE_FLOOR,
-				name: "bricks",
-				textureUri: "textures/bricks.png",
-			},
-			{
-				id: BLOCK_TYPE_START,
-				name: "start",
-				textureUri: "textures/red.png",
-			},
-			{
-				id: BLOCK_TYPE_GOAL,
-				name: "goal",
-				textureUri: "textures/green.png",
-			},
-			{
-				id: BLOCK_TYPE_WALL,
-				name: "leaves",
-				textureUri: "textures/bricks.png",
-			},
-			{
-				id: BLOCK_TYPE_VISITED,
-				name: "visited",
-				textureUri: "textures/blue.png",
-			},
-		];
-
-		this.maze.cells.forEach((cell, index) => {
-			const pos = this.maze.delinearize(index);
-			if (cell === CellType.Solid) {
-				// two block high walls
-				this.addBlock(pos.x, 1, pos.z, BLOCK_TYPE_WALL);
-				this.addBlock(pos.x, 2, pos.z, BLOCK_TYPE_WALL);
-			}
-
-			let id = 1;
-			if (index == this.maze.startIndex) {
-				id = 2;
-			} else if (index == this.maze.goalIndex) {
-				id = 3;
-			}
-
-			// ground plane, with specially marked start- and goal cells
-			this.addBlock(pos.x, 0, pos.z, id);
-		});
-	}
-
-	addBlock(x: number, y: number, z: number, id: number) {
-		this.blocks[`${x},${y},${z}`] = id;
-	}
-}
 
 let currentMaze = new WilsonMaze(15, 15);
 let playerInGoal = false;
